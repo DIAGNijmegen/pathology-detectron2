@@ -18,6 +18,7 @@ from detectron2.structures import BoxMode
 from detectron2.utils.logger import setup_logger
 from detectron2.utils.visualizer import Visualizer
 from wholeslidedata.iterators import create_batch_iterator
+import torch
 
 setup_logger()
 
@@ -38,6 +39,31 @@ label_map = {
     "Background": 5,
 }
 
+class BatchPredictor(DefaultPredictor):
+    """Run d2 on a list of images."""
+
+    def __call__(self, images):
+        """Run d2 on a list of images.
+
+        Args:
+            images (list): BGR images of the expected shape: 720x1280
+        """
+        
+        input_images = []
+        for image in images:
+            # Apply pre-processing to image.
+            if self.input_format == "RGB":
+                # whether the model expects BGR inputs or RGB
+                image = image[:, :, ::-1]
+            height, width = image.shape[:2]
+            new_image = self.aug.get_transform(image).apply_image(image)
+            new_image = torch.as_tensor(new_image.astype("float32").transpose(2, 0, 1))
+            input_images.append({"image": new_image, "height": height, "width": width})
+        
+        with torch.no_grad():
+            preds = self.model(input_images)
+        return preds
+
 class Detectron2DetectionPredictor:
     def __init__(self, weights_path, output_dir, threshold):
         cfg = get_cfg()
@@ -46,7 +72,7 @@ class Detectron2DetectionPredictor:
         )
 
         cfg.DATALOADER.NUM_WORKERS = 1
-        cfg.SOLVER.IMS_PER_BATCH = 1
+        cfg.SOLVER.IMS_PER_BATCH = 8
 
         cfg.MODEL.ROI_HEADS.BATCH_SIZE_PER_IMAGE = (
             64  # faster, and good enough for this toy dataset (default: 512)
@@ -57,26 +83,26 @@ class Detectron2DetectionPredictor:
 
         cfg.MODEL.WEIGHTS = os.path.join(weights_path)  # path to the model we just trained
         cfg.MODEL.ROI_HEADS.SCORE_THRESH_TEST = threshold  # set a custom testing threshold
-        self._predictor = DefaultPredictor(cfg)
+        self._predictor = BatchPredictor(cfg)
 
     def predict_on_batch(self, x_batch):
         # format is documented at https://detectron2.readthedocs.io/tutorials/models.html#model-output-format
         outputs = self._predictor(
-            x_batch[0]
+            x_batch
         )  
-
-        pred_boxes = outputs["instances"].get("pred_boxes")
-        scores = outputs["instances"].get("scores")
-        classes = outputs["instances"].get("pred_classes")
-        centers = pred_boxes.get_centers()
-
         predictions = []
-        for idx, center in enumerate(centers):
-            x, y = center.cpu().detach().numpy()
-            confidence = scores[idx].cpu().detach().numpy()
-            label = inv_label_map[int(classes[idx].cpu().detach())]
-            prediction_record = {'x': int(x), 'y': int(y), 'label': str(label), 'confidence': float(confidence)}
-            predictions.append(prediction_record)
+        for output in outputs:
+            predictions.append([])
+            pred_boxes = output["instances"].get("pred_boxes")
+            scores = output["instances"].get("scores")
+            classes = output["instances"].get("pred_classes")
+            centers = pred_boxes.get_centers()
+            for idx, center in enumerate(centers):
+                x, y = center.cpu().detach().numpy()
+                confidence = scores[idx].cpu().detach().numpy()
+                label = inv_label_map[int(classes[idx].cpu().detach())]
+                prediction_record = {'x': int(x), 'y': int(y), 'label': str(label), 'confidence': float(confidence)}
+                predictions[-1].append(prediction_record)
         return predictions
         
 
@@ -95,18 +121,19 @@ def inference(user_config, weights_path, output_dir, threshold=0.4, cpus=4):
     # also create json
     output_dict = {'detections': []}
     for x_batch, _, info in training_iterator:
-        point = info["sample_references"][0]["point"]
-        c, r = point.x, point.y
-        print(c, r)
         predictions = predictor.predict_on_batch(x_batch)
-        for prediction in predictions:
-            x, y, label, confidence = prediction.values()
-            if label != 'Inflammatory':
-                continue
-            x += c
-            y += r
-            prediction_record = {'x': x, 'y': y, 'label': label, 'confidence': confidence}
-            output_dict['detections'].append(prediction_record)
+        for idx, prediction in enumerate(predictions):
+            point = info["sample_references"][idx]["point"]
+            print(point)
+            c, r = point.x, point.y
+            for detections in prediction:
+                x, y, label, confidence = detections.values()
+                if label != 'Inflammatory':
+                    continue
+                x += c
+                y += r
+                prediction_record = {'x': x, 'y': y, 'label': label, 'confidence': confidence}
+                output_dict['detections'].append(prediction_record)
 
     output_path = output_dir / 'predictions.yml'
     with open(output_path, 'w') as file:
