@@ -52,7 +52,7 @@ class Detectron2DetectionPredictor:
             64  # faster, and good enough for this toy dataset (default: 512)
         )
         cfg.MODEL.ROI_HEADS.NUM_CLASSES = len(label_map)
-        cfg.OUTPUT_DIR = output_dir
+        cfg.OUTPUT_DIR = str(output_dir)
         os.makedirs(output_dir, exist_ok=True)
 
         cfg.MODEL.WEIGHTS = os.path.join(weights_path)  # path to the model we just trained
@@ -75,7 +75,7 @@ class Detectron2DetectionPredictor:
             x, y = center.cpu().detach().numpy()
             confidence = scores[idx].cpu().detach().numpy()
             label = inv_label_map[int(classes[idx].cpu().detach())]
-            prediction_record = {'x': x, 'y': y, 'label': label, 'confidence': confidence}
+            prediction_record = {'x': int(x), 'y': int(y), 'label': str(label), 'confidence': float(confidence)}
             predictions.append(prediction_record)
         return predictions
         
@@ -97,13 +97,16 @@ def inference(user_config, weights_path, output_dir, threshold=0.4, cpus=4):
     for x_batch, _, info in training_iterator:
         point = info["sample_references"][0]["point"]
         c, r = point.x, point.y
+        print(c, r)
         predictions = predictor.predict_on_batch(x_batch)
         for prediction in predictions:
             x, y, label, confidence = prediction.values()
+            if label != 'Inflammatory':
+                continue
             x += c
             y += r
             prediction_record = {'x': x, 'y': y, 'label': label, 'confidence': confidence}
-            output_dict.append(prediction_record)
+            output_dict['detections'].append(prediction_record)
 
     output_path = output_dir / 'predictions.yml'
     with open(output_path, 'w') as file:
