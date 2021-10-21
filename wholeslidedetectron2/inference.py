@@ -113,7 +113,7 @@ def inference(user_config, weights_path, output_dir, threshold=0.4, cpus=4):
     training_iterator = create_batch_iterator(
         mode=mode,
         user_config=user_config,
-        presets=("slidingwindow",),
+        presets=("folders", "slidingwindow",),
         cpus=cpus,
         number_of_batches=-1,
         return_info=True,
