@@ -74,7 +74,6 @@ class Detectron2DetectionPredictor:
         )
 
         cfg.DATALOADER.NUM_WORKERS = 1
-        cfg.SOLVER.IMS_PER_BATCH = 8
 
         cfg.MODEL.ROI_HEADS.BATCH_SIZE_PER_IMAGE = (
             64  # faster, and good enough for this toy dataset (default: 512)
