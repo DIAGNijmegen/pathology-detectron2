@@ -6,6 +6,7 @@ import argparse
 import csv
 import os
 import yaml
+import json
 from pathlib import Path
 
 # %config IPCompleter.use_jedi = False
@@ -19,6 +20,7 @@ from detectron2.utils.logger import setup_logger
 from detectron2.utils.visualizer import Visualizer
 from wholeslidedata.iterators import create_batch_iterator
 import torch
+from tqdm import tqdm
 
 setup_logger()
 
@@ -108,6 +110,7 @@ class Detectron2DetectionPredictor:
 
 def inference(user_config, weights_path, output_dir, threshold=0.4, cpus=4):
     mode = "training"
+    print('creating data iterator...')
     training_iterator = create_batch_iterator(
         mode=mode,
         user_config=user_config,
@@ -116,15 +119,20 @@ def inference(user_config, weights_path, output_dir, threshold=0.4, cpus=4):
         number_of_batches=-1,
         return_info=True,
     )
+    print('creating predictor...')
     predictor = Detectron2DetectionPredictor(weights_path=weights_path, output_dir=output_dir, threshold=threshold)
 
     # also create json
-    output_dict = {'detections': []}
-    for x_batch, _, info in training_iterator:
+    print('predicting...')
+    output_dict = {"type": 'Multiple points',
+                   "version": {"major": 1,
+                               "minor": 0},
+                   'points': []
+                  }
+    for x_batch, _, info in tqdm(training_iterator):
         predictions = predictor.predict_on_batch(x_batch)
         for idx, prediction in enumerate(predictions):
             point = info["sample_references"][idx]["point"]
-            print(point)
             c, r = point.x, point.y
             for detections in prediction:
                 x, y, label, confidence = detections.values()
@@ -132,13 +140,16 @@ def inference(user_config, weights_path, output_dir, threshold=0.4, cpus=4):
                     continue
                 x += c
                 y += r
-                prediction_record = {'x': x, 'y': y, 'label': label, 'confidence': confidence}
-                output_dict['detections'].append(prediction_record)
+                prediction_record = {'point': [x,y,confidence]}
+                output_dict['points'].append(prediction_record)
 
-    output_path = output_dir / 'predictions.yml'
-    with open(output_path, 'w') as file:
-        yaml.dump(output_dict, file)
+    print('saving predictions...')
+    output_path = output_dir / 'detected-lymphocytes.json'
+    with open(output_path, 'w') as outfile:
+         json.dump(output_dict, outfile, indent=4)
+
     training_iterator.stop()
+    print('finished!')
 
 
 def run():
