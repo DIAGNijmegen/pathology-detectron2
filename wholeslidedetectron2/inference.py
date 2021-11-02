@@ -107,7 +107,7 @@ class Detectron2DetectionPredictor:
         return predictions
         
 
-def inference(user_config, weights_path, output_dir, threshold=0.4, cpus=4):
+def inference(user_config, weights_path, output_dir, threshold=0.0, cpus=4):
     mode = "training"
     print('creating data iterator...')
     training_iterator = create_batch_iterator(
