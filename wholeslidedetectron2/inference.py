@@ -67,7 +67,7 @@ class BatchPredictor(DefaultPredictor):
         return preds
 
 class Detectron2DetectionPredictor:
-    def __init__(self, weights_path, output_dir, threshold):
+    def __init__(self, weights_path, output_dir, threshold, nms_threshold):
         cfg = get_cfg()
         cfg.merge_from_file(
             model_zoo.get_config_file("COCO-Detection/faster_rcnn_X_101_32x8d_FPN_3x.yaml")
@@ -84,6 +84,8 @@ class Detectron2DetectionPredictor:
 
         cfg.MODEL.WEIGHTS = os.path.join(weights_path)  # path to the model we just trained
         cfg.MODEL.ROI_HEADS.SCORE_THRESH_TEST = threshold  # set a custom testing threshold
+        cfg.MODEL.ROI_HEADS.NMS_THRESH_TEST = nms_threshold
+
         self._predictor = BatchPredictor(cfg)
 
     def predict_on_batch(self, x_batch):
@@ -107,7 +109,7 @@ class Detectron2DetectionPredictor:
         return predictions
         
 
-def inference(user_config, weights_path, output_dir, threshold=0.0, cpus=4):
+def inference(user_config, weights_path, output_dir, threshold=0.0, nms_threshold=0.1, cpus=4):
     mode = "training"
     print('creating data iterator...')
     training_iterator = create_batch_iterator(
@@ -119,7 +121,7 @@ def inference(user_config, weights_path, output_dir, threshold=0.0, cpus=4):
         return_info=True,
     )
     print('creating predictor...')
-    predictor = Detectron2DetectionPredictor(weights_path=weights_path, output_dir=output_dir, threshold=threshold)
+    predictor = Detectron2DetectionPredictor(weights_path=weights_path, output_dir=output_dir, threshold=threshold, nms_threshold=nms_threshold)
 
     # also create json
     print('predicting...')
@@ -128,7 +130,7 @@ def inference(user_config, weights_path, output_dir, threshold=0.0, cpus=4):
                                "minor": 0},
                    'points': []
                   }
-    for x_batch, _, info in tqdm(training_iterator):
+    for x_batch, y_batch, info in tqdm(training_iterator):
         predictions = predictor.predict_on_batch(x_batch)
         for idx, prediction in enumerate(predictions):
             point = info["sample_references"][idx]["point"]
@@ -137,6 +139,10 @@ def inference(user_config, weights_path, output_dir, threshold=0.0, cpus=4):
                 x, y, label, confidence = detections.values()
                 if label != 'Inflammatory':
                     continue
+
+                if y_batch[idx][y][x] == 0:
+                    continue
+
                 x += c
                 y += r
                 prediction_record = {'point': [x,y,confidence]}
