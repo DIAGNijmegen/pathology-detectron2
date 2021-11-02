@@ -85,6 +85,7 @@ class Detectron2DetectionPredictor:
         cfg.MODEL.WEIGHTS = os.path.join(weights_path)  # path to the model we just trained
         cfg.MODEL.ROI_HEADS.SCORE_THRESH_TEST = threshold  # set a custom testing threshold
         cfg.MODEL.ROI_HEADS.NMS_THRESH_TEST = nms_threshold
+        cfg.MODEL.RPN.NMS_THRESH = nms_threshold
 
         self._predictor = BatchPredictor(cfg)
 
