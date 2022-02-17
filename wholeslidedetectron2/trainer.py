@@ -2,14 +2,16 @@ from detectron2 import model_zoo
 from detectron2.config import get_cfg
 from detectron2.engine import DefaultTrainer
 from wholeslidedata.iterators import create_batch_iterator
-
+import os
 from wholeslidedetectron2.dataloader import WholeSlideDetectron2DataLoader
 
+import os
+os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
 
 class WholeSlideDectectron2Trainer(DefaultTrainer):
     @classmethod
     def build_train_loader(cls, cfg):
-        user_config = "./configs/detection_config.yml"
+        user_config = "/home/user/user_config_detection.yml"
         cpus = 1
         mode = "training"
 
@@ -34,9 +36,9 @@ def train():
     cfg.DATALOADER.NUM_WORKERS = 1
     #     cfg.MODEL.WEIGHTS = "detectron2://COCO-Detection/faster_rcnn_X_101_32x8d_FPN_3x/139173657/model_final_68b088.pkl"  # Let training initialize from model zoo
     # cfg.MODEL.WEIGHTS = None
-    cfg.SOLVER.IMS_PER_BATCH = 8
-    cfg.SOLVER.BASE_LR = 0.00001  # pick a good LR
-    cfg.SOLVER.MAX_ITER = 200000  # 300 iterations seems good enough for this toy dataset; you may need to train longer for a practical dataset
+    cfg.SOLVER.IMS_PER_BATCH = 1
+    cfg.SOLVER.BASE_LR = 0.000001  # pick a good LR
+    cfg.SOLVER.MAX_ITER = 300  # 300 iterations seems good enough for this toy dataset; you may need to train longer for a practical dataset
     cfg.MODEL.ROI_HEADS.BATCH_SIZE_PER_IMAGE = (
         64  # faster, and good enough for this toy dataset (default: 512)
     )
@@ -46,7 +48,7 @@ def train():
     cfg.SOLVER.WARMUP_ITERS = 100
     cfg.SOLVER.GAMMA = 0.5
     os.makedirs(cfg.OUTPUT_DIR, exist_ok=True)
-    trainer = WholeSlideDataDetectionTrainer(cfg)
+    trainer = WholeSlideDectectron2Trainer(cfg)
     trainer.resume_or_load(resume=False)
     trainer.train()
 
