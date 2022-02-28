@@ -1,14 +1,13 @@
 import numpy as np
 import torch
-from detectron2.structures import Boxes, BoxMode, Instances
+from detectron2.structures import Boxes, Instances
 from wholeslidedata.iterators import BatchIterator
 
 
 class WholeSlideDetectron2DataLoader(BatchIterator):
+    MIN_DETECTION_SIZE = 4
     def __next__(self):
         x_batch, y_batch, _ = super().__next__()
-        x_batch = x_batch / 255.0
-
         batch_dicts = []
         for idx, image in enumerate(x_batch):
             sample_dict = {}
@@ -21,13 +20,22 @@ class WholeSlideDetectron2DataLoader(BatchIterator):
 
     def _get_gt_boxes(self, y_sample, image_size):
         y_boxes = y_sample[~np.all(y_sample == 0, axis=-1)]
-        boxes = [
-            BoxMode.convert(obj[:4], BoxMode.XYXY_ABS, BoxMode.XYXY_ABS)
-            for obj in y_boxes
-        ]
+        boxes = y_boxes[..., :4].astype('int32')
+        target_boxes = []
+        target_classes = []
+        for idx, box in enumerate(boxes):
+            
+            if (box[2]-box[0]) < WholeSlideDetectron2DataLoader.MIN_DETECTION_SIZE:
+                continue
+            if (box[3]-box[1]) < WholeSlideDetectron2DataLoader.MIN_DETECTION_SIZE:
+                continue
+            
+            target_boxes.append(box)
+            target_classes.append(y_boxes[idx][-2]-1)
+            
         target = Instances(image_size)
-        target.gt_boxes = Boxes(boxes)
-        classes = [int(obj[-2] - 1) for obj in y_boxes]
-        classes = torch.tensor(classes, dtype=torch.int64)
+        target_boxes = np.array(target_boxes)
+        target.gt_boxes = Boxes(target_boxes)
+        classes = torch.tensor(target_classes, dtype=torch.int64)
         target.gt_classes = classes
         return target
