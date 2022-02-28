@@ -27,7 +27,7 @@ class WholeSlideDetectron2DataLoader(BatchIterator):
         ]
         target = Instances(image_size)
         target.gt_boxes = Boxes(boxes)
-        classes = [int(obj[-2]-1) for obj in y_boxes]
+        classes = [int(obj[-2] - 1) for obj in y_boxes]
         classes = torch.tensor(classes, dtype=torch.int64)
         target.gt_classes = classes
         return target
